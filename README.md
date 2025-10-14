@@ -32,18 +32,52 @@ pip install -r requirements.txt
 
 Note: FFmpeg must be installed separately and accessible via the command line (ffmpeg -version should work).
 
+## Example Use Cases
+
+Podcasts: trim dead air and pauses from dialogue tracks for multiple recordings at a time
+
+Audiobooks: maintain consistent pacing between multiple chapters or takes without individually editing files
+
+Music production: clean up exported stems or live takes before mixing or sharing
+
+
+## Running the GUI
+
+There are multiple ways to launch the Batch Silence Trimmer GUI:
+
+Option 1: Python launcher (cross-platform)
+
+```bash
+python run.py
+```
+
+Option 2: Platform-specific scripts
+
+Windows: double-click `run.bat` or run it from the command prompt.
+
+macOS/Linux: run `./run.sh` in a terminal.
+
+The GUI will open, allowing you to select input/output folders and configure silence detection and trimming parameters.
+
 ## Usage
-Run the script with your input and output folders:
 
-```bash
-python batch_silence_trimmer.py /path/to/input /path/to/output
-```
+1. Select an Input Folder containing WAV files.
+2. Select an Output Folder for trimmed files.
+3. Adjust parameters:
+   
+    Threshold (dB): silence detection threshold
 
-You can also specify custom silence thresholds and duration (optional):
+    Min Silence (s): minimum duration to be considered silence
 
-```bash
-python batch_silence_trimmer.py /input /output --silence-threshold -25 --min-silence 0.4
-```
+    Max Gap (s): maximum allowed pause in final audio
+
+    Padding (s): optional silence padding
+
+  A waveform preview should generate for the first file selected in the batch
+
+4. Click Start Batch Trim & Shrink to process all WAV files in the input folder.
+
+  Processed files will appear in the selected output folder.
 
 ## Example Output
 
@@ -58,15 +92,6 @@ Take_02_trimmed.wav
 ...
 ```
 
-## Example Use Cases
-
-Podcasts: trim dead air and pauses from dialogue tracks for multiple recordings at a time
-
-Audiobooks: maintain consistent pacing between multiple chapters or takes without individually editing files
-
-Music production: clean up exported stems or live takes before mixing or sharing
-
-
 ## Tips
 
 If FFmpeg errors mention `Option not found`, make sure your FFmpeg build supports `silenceremove`.
@@ -74,37 +99,6 @@ If FFmpeg errors mention `Option not found`, make sure your FFmpeg build support
 Experiment with different `--silence-threshold` values depending on background noise levels.
 
 Keep a backup of your raw recordings because the script overwrites nothing by default!
-
-## Build as Executable
-
-To make Batch Silence Trimmer installable and runnable without Python, you can package it into an executable for Windows or macOS using PyInstaller.
-
-1. Install PyInstaller
- 
-```bash
-pip install pyinstaller
-```
-
-2. Build the Executable
-
-From the project directory, run:
-
-```bash
-pyinstaller --onefile batch_silence_trimmer.py
-```
-
-This creates a standalone executable inside the dist folder:
-
-Windows: `dist\batch_silence_trimmer.exe`
-
-macOS: `dist/batch_silence_trimmer`
-
-3. Run the Executable
-You can now double-click or run it directly from a terminal:
-
-```bash
-./dist/batch_silence_trimmer /path/to/input /path/to/output
-```
 
 ---
 
