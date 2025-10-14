@@ -1,2 +1,8 @@
+# Python dependencies
 numpy
 matplotlib
+
+# Tkinter is part of the standard library, no need to install separately
+# System dependency: FFmpeg must be installed and accessible in your PATH
+#   - On macOS: brew install ffmpeg
+#   - On Windows: download from https://ffmpeg.org/ and add to PATH
