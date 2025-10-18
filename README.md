@@ -14,12 +14,15 @@ Batch Silence Trimmer automates silence detection and trimming across large batc
 - Safe output: writes processed files to a separate output directory  
 - Optional CSV logs (coming soon): export silence interval data for analysis or QC  
 
-## Requirements
+## Dependencies
 
-- Python 3.8 or later  
-- FFmpeg installed and available in your system PATH  
-  - Download FFmpeg: https://ffmpeg.org/download.html  
-
+- Python 3.8+ (tested with 3.10)
+- numpy – for audio array processing
+- matplotlib – for waveform previews
+- tkinter – standard with Python, used for GUI
+- ttk – included with tkinter, for progress bar
+- ffmpeg – must be installed separately and available in system PATH
+  
 ## Installation
 
 Clone this repository and install dependencies:
