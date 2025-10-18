@@ -1,7 +1,8 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-import subprocess, os, csv
-import shlex
+import subprocess
+import os
+import csv
 import wave
 import numpy as np
 import matplotlib.pyplot as plt
@@ -34,7 +35,7 @@ def detect_silence_ffmpeg(input_file, threshold="-35dB", min_silence=0.7):
     ]
     result = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     stderr = result.stderr.splitlines()
-    
+
     silences = []
     current_start = None
     for line in stderr:
@@ -169,31 +170,17 @@ def shrink_silence(input_file, output_file, threshold="-35dB", min_silence=0.7, 
         if os.path.isfile(p):
             os.remove(p)
 
-# Step 7: Export CSV labels (formatted and summarized)
-def format_time(seconds):
-    minutes = int(seconds // 60)
-    secs = seconds % 60
-    return f"{minutes:02d}:{secs:06.3f}"
+    # Step 7: Export CSV labels in MM:SS.mmm format
+    label_file = os.path.splitext(output_file)[0] + "_labels.csv"
+    with open(label_file, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Start", "End", "Type"])
+        for start, end, typ in labels:
+            start_mmss = f"{int(start//60):02d}:{start%60:06.3f}"
+            end_mmss = f"{int(end//60):02d}:{end%60:06.3f}"
+            writer.writerow([start_mmss, end_mmss, typ])
 
-label_file = os.path.splitext(output_file)[0] + "_labels.csv"
-
-# Compute totals
-total_silences = len(labels)
-long_silences = sum(1 for _, _, t in labels if "LONG" in t)
-with wave.open(output_file, "rb") as wf:
-    total_duration = wf.getnframes() / wf.getframerate()
-
-with open(label_file, "w", newline="") as f:
-    writer = csv.writer(f)
-    writer.writerow(["Start (MM:SS.mmm)", "End (MM:SS.mmm)", "Type"])
-    for start, end, label_type in labels:
-        writer.writerow([format_time(start), format_time(end), label_type])
-
-    writer.writerow([])  # blank line
-    writer.writerow(["Summary"])
-    writer.writerow(["Total Duration", format_time(total_duration)])
-    writer.writerow(["Total Silences Detected", total_silences])
-    writer.writerow(["Long Silences Shrunk", long_silences])
+    print(f"Done: {output_file} (+ labels: {label_file})")
 
 # -----------------------
 # Batch process with progress bar
@@ -210,7 +197,6 @@ def run_batch():
         messagebox.showerror("Error", "Input folder is invalid.")
         return
 
-    # Auto-create output dir if missing
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
@@ -277,7 +263,6 @@ tk.Button(root, text="Start Batch Trim & Shrink", command=run_batch, bg="green",
 status_label = tk.Label(root, text="")
 status_label.grid(row=7, column=0, columnspan=3)
 
-# Progress bar
 progress = ttk.Progressbar(root, length=300, mode="determinate")
 progress.grid(row=8, column=0, columnspan=3, pady=5)
 
