@@ -1,10 +1,25 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 import subprocess, os, csv
 import shlex
 import wave
 import numpy as np
 import matplotlib.pyplot as plt
+
+# -----------------------
+# Check ffmpeg installation
+# -----------------------
+def check_ffmpeg():
+    try:
+        result = subprocess.run(["ffmpeg", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.returncode != 0:
+            raise FileNotFoundError
+    except FileNotFoundError:
+        messagebox.showerror(
+            "Error",
+            "ffmpeg not found.\n\nPlease install ffmpeg and ensure it's available in your system PATH."
+        )
+        root.destroy()
 
 # -----------------------
 # Detect silences with ffmpeg
@@ -66,9 +81,6 @@ def preview_waveform():
 # Trim & shrink long silences
 # -----------------------
 def shrink_silence(input_file, output_file, threshold="-35dB", min_silence=0.7, max_gap=4.0, pad=0.2):
-    """
-    Trim leading/trailing silence, shrink long silences, and export labels.
-    """
     print(f"Processing: {input_file}")
 
     temp_file = output_file.replace(".wav", "_temp.wav")
@@ -76,12 +88,11 @@ def shrink_silence(input_file, output_file, threshold="-35dB", min_silence=0.7, 
     # Step 1: Trim leading/trailing silence
     cmd_trim = [
         "ffmpeg",
-        "-y",  # overwrite
+        "-y",
         "-i", input_file,
         "-af", f"silenceremove=start_periods=1:start_threshold={threshold}:stop_threshold={threshold}:stop_duration={min_silence}",
         temp_file
     ]
-    print("Running trim command:", " ".join(shlex.quote(c) for c in cmd_trim))
     result = subprocess.run(cmd_trim, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if not os.path.isfile(temp_file) or os.path.getsize(temp_file) == 0:
         print(f"Error: temp file not created: {temp_file}")
@@ -90,7 +101,6 @@ def shrink_silence(input_file, output_file, threshold="-35dB", min_silence=0.7, 
 
     # Step 2: Detect silences
     silences = detect_silence_ffmpeg(temp_file, threshold, min_silence)
-    print("Detected silences:", silences)
 
     # Step 3: Build segments
     segments = []
@@ -98,10 +108,9 @@ def shrink_silence(input_file, output_file, threshold="-35dB", min_silence=0.7, 
     last_end = 0.0
     for start, end in silences:
         if start > last_end:
-            segments.append((last_end, start))  # non-silence segment
+            segments.append((last_end, start))
         duration = end - start
         if duration > max_gap:
-            # shrink long silence
             segments.append((start, start + max_gap))
             labels.append((start, end, "LONG SILENCE SHRUNK"))
             last_end = start + max_gap
@@ -110,15 +119,12 @@ def shrink_silence(input_file, output_file, threshold="-35dB", min_silence=0.7, 
             labels.append((start, end, "SHORT SILENCE"))
             last_end = end
 
-    # add final segment if any audio remains
     with wave.open(temp_file, "rb") as wf:
         total_duration = wf.getnframes() / wf.getframerate()
     if last_end < total_duration:
         segments.append((last_end, total_duration))
 
-    print("Segments to extract:", segments)
-
-    # Step 4: Extract segments as WAV
+    # Step 4: Extract segments
     temp_dir = os.path.dirname(temp_file)
     part_files = []
     for i, (s, e) in enumerate(segments):
@@ -129,15 +135,12 @@ def shrink_silence(input_file, output_file, threshold="-35dB", min_silence=0.7, 
             "-i", temp_file,
             "-ss", str(s),
             "-to", str(e),
-            "-c:a", "pcm_s16le",  # force uncompressed WAV
+            "-c:a", "pcm_s16le",
             part_path
         ]
-        print("Extracting segment:", " ".join(shlex.quote(c) for c in cmd_extract))
         subprocess.run(cmd_extract, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if os.path.isfile(part_path) and os.path.getsize(part_path) > 0:
             part_files.append(part_path)
-        else:
-            print(f"Warning: segment file empty or not created: {part_path}")
 
     if not part_files:
         print(f"Error: no segments extracted for {input_file}")
@@ -159,25 +162,41 @@ def shrink_silence(input_file, output_file, threshold="-35dB", min_silence=0.7, 
         "-c:a", "pcm_s16le",
         output_file
     ]
-    print("Concatenating segments:", " ".join(shlex.quote(c) for c in cmd_concat))
     subprocess.run(cmd_concat, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-    # Step 6: Clean up temp files
+    # Step 6: Clean up
     for p in part_files + [temp_file, list_file]:
         if os.path.isfile(p):
             os.remove(p)
 
-    # Step 7: Export CSV labels
-    label_file = os.path.splitext(output_file)[0] + "_labels.csv"
-    with open(label_file, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["Start", "End", "Type"])
-        writer.writerows(labels)
+# Step 7: Export CSV labels (formatted and summarized)
+def format_time(seconds):
+    minutes = int(seconds // 60)
+    secs = seconds % 60
+    return f"{minutes:02d}:{secs:06.3f}"
 
-    print(f"Done: {output_file} (+ labels: {label_file})")
+label_file = os.path.splitext(output_file)[0] + "_labels.csv"
+
+# Compute totals
+total_silences = len(labels)
+long_silences = sum(1 for _, _, t in labels if "LONG" in t)
+with wave.open(output_file, "rb") as wf:
+    total_duration = wf.getnframes() / wf.getframerate()
+
+with open(label_file, "w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerow(["Start (MM:SS.mmm)", "End (MM:SS.mmm)", "Type"])
+    for start, end, label_type in labels:
+        writer.writerow([format_time(start), format_time(end), label_type])
+
+    writer.writerow([])  # blank line
+    writer.writerow(["Summary"])
+    writer.writerow(["Total Duration", format_time(total_duration)])
+    writer.writerow(["Total Silences Detected", total_silences])
+    writer.writerow(["Long Silences Shrunk", long_silences])
 
 # -----------------------
-# Batch process
+# Batch process with progress bar
 # -----------------------
 def run_batch():
     input_dir = input_entry.get()
@@ -187,17 +206,30 @@ def run_batch():
     max_gap = float(max_gap_entry.get())
     pad = float(pad_entry.get())
 
-    if not os.path.isdir(input_dir) or not os.path.isdir(output_dir):
-        messagebox.showerror("Error", "Input and Output must be valid folders")
+    if not os.path.isdir(input_dir):
+        messagebox.showerror("Error", "Input folder is invalid.")
         return
 
-    for fname in os.listdir(input_dir):
-        if fname.lower().endswith(".wav"):
-            in_path = os.path.join(input_dir, fname)
-            out_path = os.path.join(output_dir, fname.replace(".wav", "_trimmed.wav"))
-            shrink_silence(in_path, out_path, threshold, min_silence, max_gap, pad)
-            status_label.config(text=f"Processed: {fname}")
-            root.update()
+    # Auto-create output dir if missing
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    wav_files = [f for f in os.listdir(input_dir) if f.lower().endswith(".wav")]
+    if not wav_files:
+        messagebox.showinfo("No files", "No WAV files found in input folder.")
+        return
+
+    progress["maximum"] = len(wav_files)
+    progress["value"] = 0
+    root.update_idletasks()
+
+    for i, fname in enumerate(wav_files, start=1):
+        in_path = os.path.join(input_dir, fname)
+        out_path = os.path.join(output_dir, fname.replace(".wav", "_trimmed.wav"))
+        shrink_silence(in_path, out_path, threshold, min_silence, max_gap, pad)
+        status_label.config(text=f"Processed: {fname}")
+        progress["value"] = i
+        root.update_idletasks()
 
     messagebox.showinfo("Done", "Batch trimming complete!")
 
@@ -206,6 +238,8 @@ def run_batch():
 # -----------------------
 root = tk.Tk()
 root.title("Narration Silence Trimmer (Shrink Long Pauses)")
+
+check_ffmpeg()  # ensure ffmpeg installed
 
 tk.Label(root, text="Input Folder").grid(row=0, column=0)
 input_entry = tk.Entry(root, width=40)
@@ -242,5 +276,9 @@ tk.Button(root, text="Start Batch Trim & Shrink", command=run_batch, bg="green",
 
 status_label = tk.Label(root, text="")
 status_label.grid(row=7, column=0, columnspan=3)
+
+# Progress bar
+progress = ttk.Progressbar(root, length=300, mode="determinate")
+progress.grid(row=8, column=0, columnspan=3, pady=5)
 
 root.mainloop()
