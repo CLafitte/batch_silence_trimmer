@@ -1,8 +1,8 @@
 # Batch Silence Trimmer
 
-A cross-platform tool for audiobook producers and podcasters to remove silences from batches of WAV files at a time. Detects silences across multiple files, trims to a user-defined threshold, and exports trim labels with timestamps to .CSV. Built for audio engineers, podcasters, and audiobook producers.
+A cross-platform tool that removes silences from a batch of WAV files. Detects silences in waveforms, trims to a user-defined threshold, and exports trim labels with timestamps to .CSV. Built for audio engineers, podcasters, and audiobook producers.
 
-Batch Silence Trimmer automates silence detection and trimming across large batches of WAV files using FFmpeg. It creates clean, consistently timed audio clips ideal for mastering, dialogue editing, or post-production workflows.
+Architecturally, Batch Silence Trimmer is built on FFmpeg and numpy (for audio analysis/editing) and employs Tkinter for the basic GUI. 
 
 ---
 
@@ -12,7 +12,15 @@ Batch Silence Trimmer automates silence detection and trimming across large batc
 - Customizable thresholds: adjust silence sensitivity and duration  
 - Smart detection: uses FFmpeg’s `silenceremove` filter for precise silence trimming  
 - Safe output: writes processed files to a separate output directory  
-- Optional CSV logs (coming soon): export silence interval data for analysis or QC  
+- Optional CSV logs (coming soon): export silence interval data for analysis or QC
+
+## Example Use Cases
+
+Podcasts: trim dead air and pauses from dialogue tracks for multiple recordings at a time
+
+Audiobooks: maintain consistent pacing between multiple chapters or takes without individually editing files
+
+Music production: clean up exported stems or live takes before mixing or sharing
 
 ## Dependencies
 
@@ -34,15 +42,6 @@ pip install -r requirements.txt
 ```
 
 Note: FFmpeg must be installed separately and accessible via the command line (ffmpeg -version should work).
-
-## Example Use Cases
-
-Podcasts: trim dead air and pauses from dialogue tracks for multiple recordings at a time
-
-Audiobooks: maintain consistent pacing between multiple chapters or takes without individually editing files
-
-Music production: clean up exported stems or live takes before mixing or sharing
-
 
 ## Running the GUI
 
