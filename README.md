@@ -1,6 +1,6 @@
 # Batch Silence Trimmer
 
-Fast, accurate batch silence removal and pause compression for WAV files — built for audio engineers, podcasters, and audiobook producers.
+A cross-platform tool for audiobook producers and podcasters to remove silences from batches of WAV files at a time. Detects silences across multiple files, trims to a user-defined threshold, and exports trim labels with timestamps to .CSV. Built for audio engineers, podcasters, and audiobook producers.
 
 Batch Silence Trimmer automates silence detection and trimming across large batches of WAV files using FFmpeg. It creates clean, consistently timed audio clips ideal for mastering, dialogue editing, or post-production workflows.
 
