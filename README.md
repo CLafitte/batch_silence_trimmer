@@ -47,13 +47,13 @@ Note: FFmpeg must be installed separately and accessible via the command line (f
 
 There are multiple ways to launch the Batch Silence Trimmer GUI:
 
-Option 1: Python launcher (cross-platform)
+**Option 1:** Python launcher (cross-platform)
 
 ```bash
 python run.py
 ```
 
-Option 2: Platform-specific scripts
+**Option 2:** Platform-specific scripts
 
 Windows: double-click `run.bat` or run it from the command prompt.
 
