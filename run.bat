@@ -1,4 +1,6 @@
 @echo off
+cd /d "%~dp0"
 REM Launch Batch Silence Trimmer GUI
-python batchsilencetrimmer.py
+python "%~dp0batch_silence_trimmer.py"
+echo.
 pause
