@@ -1,0 +1,164 @@
+v.0.2.0-alpha_refactor_proposal.txt
+
+---
+
+# batch_silence_trimmer restructure proposal
+
+## Modular Topology
+
+**Each major substructure gets a dedicate module:
+
+### 1. ffmpeg_tools
+
+**Responsibility:** Abstract FFmpeg operations (detect silence, trim, extract segments, concatenate audio).
+**Functions / Examples:**
+
+* `detect_silence(input_file, threshold, min_silence)` → returns list of `(start, end)` tuples.
+* `trim_silence(input_file, output_file, threshold, min_silence)` → produces temp trimmed file.
+* `extract_segment(input_file, start, end, output_file)` → extracts one segment.
+* `concatenate_files(file_list, output_file)` → merges segments into final file.
+
+**Inputs:** file paths, FFmpeg parameters
+**Outputs:** list of silence regions, trimmed audio files, final concatenated file
+
+---
+
+### 2. dsp_tools
+
+**Responsibility:** Any optional Python-based signal analysis; currently mostly placeholders but future-proofed for amplitude analysis, peak detection, or custom silence heuristics.
+**Functions / Examples:**
+
+* `compute_rms(audio_data)`
+* `detect_silence_rms(audio_data, rate, threshold)` → returns start/end times
+
+**Inputs:** raw audio arrays (numpy), sample rate
+**Outputs:** silence regions or analysis data
+
+---
+
+### 3. silence_logic
+
+**Responsibility:** Apply rules to decide which silences to shrink or keep.
+**Functions / Examples:**
+
+* `shrink_long_silences(silences, max_gap)` → list of modified silences
+* `apply_padding(segments, pad)` → adjusted segment boundaries
+
+**Inputs:** list of `(start, end)` silences, parameters `max_gap`, `pad`
+**Outputs:** final segment boundaries to extract
+
+---
+
+### 4. segmentation
+
+**Responsibility:** Take final segments and produce audio files.
+**Functions / Examples:**
+
+* `split_audio(input_file, segments, output_dir)` → writes segments
+* Returns list of output file paths
+
+**Inputs:** trimmed audio file, segment list
+**Outputs:** audio segment files
+
+---
+
+### 5. batch_workers
+
+**Responsibility:** Orchestrate concurrent processing of multiple files, report status.
+**Functions / Examples:**
+
+* `worker_process(in_path, out_path, params)` → wraps pipeline for single file
+* `run_batch(file_list, params, callback)` → executes all workers with concurrency, pushes status to callback
+
+**Inputs:** list of files, parameters, optional callback queue
+**Outputs:** status messages, processed files
+
+---
+
+### 6. state_manager
+
+**Responsibility:** Keep track of which files are processed, enable resumable batches.
+**Functions / Examples:**
+
+* `load_state(state_file)` → dict of processed files
+* `update_state(state_file, file, status)`
+* `save_state(state_file, state)`
+
+**Inputs:** JSON path, file info, status
+**Outputs:** persisted state
+
+---
+
+### 7. gui
+
+**Responsibility:** User interface, parameter input, visualization, preview.
+**Functions / Examples:**
+
+* `preview_waveform(file)` → shows waveform with detected silences
+* `launch_batch()` → collects user inputs and calls `batch_workers.run_batch`
+* Polls queue for progress and updates GUI
+
+**Inputs:** folder paths, threshold/min_silence/max_gap/pad, worker count
+**Outputs:** GUI updates, plots, message boxes
+
+---
+
+## Data Flow
+
+```text
+[GUI]
+   │ collects parameters, triggers preview/batch
+   ▼
+[state_manager] ←→ [batch_workers] ←→ [segmentation] ←→ [silence_logic] ←→ [ffmpeg_tools/dsp_tools]
+   │                                                        ▲
+   └────────────── optional DSP analysis/preview ──────────┘
+```
+
+**Notes:**
+
+* GUI never manipulates audio directly; only orchestrates.
+* `batch_workers` handles concurrency, communicates progress to GUI.
+* `state_manager` ensures resumable operation and error logging.
+* `ffmpeg_tools` is the core engine for trimming/extracting audio.
+* `dsp_tools` is optional but future-proof for advanced heuristics.
+
+---
+
+## Refactored Directory Structure
+
+```
+batch_silence_trimmer/
+├── ffmpeg_tools/
+│   ├── __init__.py
+│   ├── ffmpeg_operations.py    # detect_silence, trim_silence, extract_segment, concatenate_files
+│   └── utils.py               # any helper functions for ffmpeg
+├── dsp_tools/
+│   ├── __init__.py
+│   ├── dsp_analysis.py         # RMS, amplitude, peak detection, etc.
+│   └── utils.py
+├── silence_logic/
+│   ├── __init__.py
+│   ├── shrink_rules.py         # shrink_long_silences, apply_padding
+│   └── utils.py
+├── segmentation/
+│   ├── __init__.py
+│   ├── split_audio.py          # segment extraction
+│   └── utils.py
+├── batch_workers/
+│   ├── __init__.py
+│   ├── worker.py               # worker_process, run_batch
+│   └── concurrency_utils.py
+├── state_manager/
+│   ├── __init__.py
+│   ├── state.py                # load_state, update_state, save_state
+│   └── utils.py
+├── gui/
+│   ├── __init__.py
+│   ├── main_gui.py             # tkinter launch, polling, preview
+│   └── utils.py
+├── tests/
+│   └── test_ffmpeg_tools.py
+└── README.md
+```
+
+---
