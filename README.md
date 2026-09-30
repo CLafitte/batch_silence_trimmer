@@ -2,7 +2,7 @@
 
 A cross-platform tool that removes silences from a batch of WAV files. Detects silences in waveforms, trims to a user-defined threshold, and (coming soon) exports trim labels with timestamps to .CSV. Built for audio engineers, podcasters, and audiobook producers.
 
-Architecturally, Batch Silence Trimmer is built on FFmpeg and numpy (for audio analysis/editing) and employs Tkinter for the basic GUI. 
+## Requirements
 
 ---
 
@@ -94,27 +94,20 @@ Take_02_trimmed.wav
 ...
 ```
 
-## Tips
+Choose input and output folders, adjust settings, and click **Start Batch Trim & Shrink**. **Preview Waveform** shows detected silences in red so you can tune the settings first.
 
-If FFmpeg errors mention `Option not found`, make sure your FFmpeg build supports `silenceremove`.
+## Settings
 
-Experiment with different `--silence-threshold` values depending on background noise levels.
+- **Threshold:** level below which audio counts as silence (default -35dB)
+- **Min Silence:** shortest gap treated as silence (0.7 s)
+- **Max Gap:** longest internal pause kept (4.0 s)
+- **Padding:** silence kept beside speech at the start and end (0.2 s)
+- **Workers:** files processed in parallel
 
-Keep a backup of your raw recordings because the script overwrites nothing by default!
+## Output
 
----
+For each `name.wav`, the output folder gets `name_trimmed.wav` and `name_trimmed_labels.csv`. Label times match the trimmed audio.
 
-## For Developers
+Progress is saved in `batch_state.json`, so an interrupted batch resumes where it left off.
 
-The project is designed for easy packaging into a CLI tool or standalone installer for Windows and macOS.
-A simple GUI wrapper using PyInstaller or Electron + Python backend is also planned.
-
-## License
-
-MIT License — feel free to modify and redistribute.
-
-
-## Contributing
-
-Pull requests, feature requests, complaints, bug reports, and ideas are welcome.
-If you do use this tool in your audio workflow, please share your experience or feature suggestions at connor@connorlafitte.com
+Only `.wav` files are batch-processed.
