@@ -1,0 +1,154 @@
+import csv
+import os
+import subprocess
+import tempfile
+import wave
+
+EPS = 0.05  # how close to 0 / EOF counts as "leading" / "trailing"
+
+
+# -----------------------
+# Detect silences with ffmpeg
+# -----------------------
+def detect_silence_ffmpeg(input_file, threshold="-35dB", min_silence=0.7, total=None):
+    """Return [(start, end), ...]. If the file ends mid-silence and `total`
+    is given, that trailing silence is closed at `total`."""
+    cmd = [
+        "ffmpeg", "-nostdin",
+        "-i", input_file,
+        "-af", f"silencedetect=noise={threshold}:d={min_silence}",
+        "-f", "null", "-",
+    ]
+    result = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+
+    silences = []
+    current_start = None
+    for line in result.stderr.splitlines():
+        if "silence_start:" in line:
+            try:
+                current_start = max(0.0, float(line.split("silence_start:")[1].split()[0]))
+            except (ValueError, IndexError):
+                current_start = None
+        elif "silence_end:" in line:
+            try:
+                end_time = float(line.split("silence_end:")[1].split("|")[0])
+            except ValueError:
+                continue
+            if current_start is not None:
+                silences.append((current_start, end_time))
+                current_start = None
+
+    if current_start is not None and total is not None:
+        silences.append((current_start, total))
+    return silences
+
+
+# -----------------------
+# Trim & shrink silences in ONE ffmpeg pass
+# -----------------------
+def shrink_silence(input_file, output_file, threshold="-35dB", min_silence=0.7, max_gap=4.0, pad=0.2):
+    """
+    - Leading/trailing silence is removed, keeping `pad` seconds next to speech.
+    - Internal silences longer than `max_gap` are cut down to exactly `max_gap`
+      (half kept on each side of the cut so the pause sounds natural).
+    - Shorter silences are left alone.
+    Labels are written in OUTPUT time, so they line up with the new file.
+    """
+    print(f"Processing: {input_file}")
+
+    try:
+        with wave.open(input_file, "rb") as wf:
+            total = wf.getnframes() / wf.getframerate()
+    except Exception as e:
+        return False, f"Can't read WAV: {e}"
+
+    silences = detect_silence_ffmpeg(input_file, threshold, min_silence, total)
+
+    # 1. Work out which regions get removed (original timeline)
+    cuts = []    # (start, end) removed
+    labels = []  # (start, end, type) original timeline
+    half = max_gap / 2.0
+    for start, end in silences:
+        if start <= EPS:                       # leading silence
+            if end - pad > 0:
+                cuts.append((0.0, end - pad))
+        elif end >= total - EPS:               # trailing silence
+            if start + pad < total:
+                cuts.append((start + pad, total))
+        elif end - start > max_gap:            # long internal silence
+            cuts.append((start + half, end - half))
+            labels.append((start, end, "LONG SILENCE SHRUNK"))
+        else:
+            labels.append((start, end, "SHORT SILENCE"))
+    cuts.sort()
+
+    # 2. Keep segments = everything that isn't cut
+    keep = []
+    cursor = 0.0
+    for cs, ce in cuts:
+        if cs - cursor > 0.01:
+            keep.append((cursor, cs))
+        cursor = max(cursor, ce)
+    if total - cursor > 0.01:
+        keep.append((cursor, total))
+    if not keep:
+        return False, "Nothing left after trimming (file is all silence?)"
+
+    # 3. One ffmpeg call: atrim each kept segment, then concat
+    parts = [
+        f"[0:a]atrim=start={s:.6f}:end={e:.6f},asetpts=PTS-STARTPTS[a{i}]"
+        for i, (s, e) in enumerate(keep)
+    ]
+    joined = "".join(f"[a{i}]" for i in range(len(keep)))
+    parts.append(f"{joined}concat=n={len(keep)}:v=0:a=1[out]")
+
+    # Script file avoids command-line length limits on long recordings, and the
+    # per-job temp dir means parallel workers can't clobber each other.
+    with tempfile.TemporaryDirectory() as tmp:
+        script_path = os.path.join(tmp, "filter.txt")
+        with open(script_path, "w") as f:
+            f.write(";\n".join(parts))
+
+        cmd = [
+            "ffmpeg", "-y", "-nostdin",
+            "-i", input_file,
+            "-filter_complex_script", script_path,
+            "-map", "[out]",
+            "-c:a", "pcm_s16le",
+            output_file,
+        ]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    if result.returncode != 0 or not os.path.isfile(output_file) or os.path.getsize(output_file) == 0:
+        if os.path.isfile(output_file):
+            try:
+                os.remove(output_file)
+            except OSError:
+                pass
+        tail = "\n".join(result.stderr.strip().splitlines()[-5:])
+        return False, f"ffmpeg failed: {tail}"
+
+    # 4. Labels in OUTPUT time
+    def to_out(t):
+        removed = 0.0
+        for cs, ce in cuts:
+            if ce <= t:
+                removed += ce - cs
+            elif cs < t:
+                removed += t - cs
+        return t - removed
+
+    def mmss(t):
+        return f"{int(t // 60):02d}:{t % 60:06.3f}"
+
+    label_file = os.path.splitext(output_file)[0] + "_labels.csv"
+    with open(label_file, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Start", "End", "Type"])
+        for start, end, typ in labels:
+            s_out = to_out(start)
+            e_out = s_out + max_gap if typ == "LONG SILENCE SHRUNK" else to_out(end)
+            writer.writerow([mmss(s_out), mmss(e_out), typ])
+
+    print(f"Done: {output_file} (+ labels: {label_file})")
+    return True, None
